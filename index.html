@@ -1,5 +1,599 @@
-<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#0b1020"><title>Feather Browser v2</title><style>
-:root{font-family:system-ui,-apple-system,Segoe UI,sans-serif;color-scheme:dark;--bg:#0b1020;--panel:#141c30;--text:#edf2ff;--muted:#9aa9c4;--accent:#83aaff;--line:#293550;--wall:none}*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);min-height:100vh}body.light{color-scheme:light;--bg:#f1f5fc;--panel:#fff;--text:#18243c;--muted:#596880;--line:#dce3ef}body.oled{--bg:#000;--panel:#101010;--line:#303030}button,input,select{font:inherit}button,select{cursor:pointer;background:var(--panel);color:var(--text);border:1px solid var(--line);border-radius:11px;padding:10px}button:hover{border-color:var(--accent)}button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid var(--accent);outline-offset:2px}button:disabled{opacity:.35;cursor:default}header{padding:10px 14px;background:var(--panel);border-bottom:1px solid var(--line)}.tabs{display:flex;gap:6px;overflow-x:auto;margin-bottom:9px}.tab{display:flex;align-items:center;gap:4px;background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:3px;max-width:220px}.tab.active{border-color:var(--accent)}.tab button{border:0;padding:7px;background:transparent}.tab .name{min-width:90px;max-width:165px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:left}.bar{display:flex;align-items:center;gap:7px}.bar input,.search input{min-width:0;flex:1;padding:12px;border-radius:11px;border:1px solid var(--line);background:var(--bg);color:var(--text)}.primary{background:var(--accent);color:#091325;font-weight:700}.shell{min-height:calc(100vh - 116px);background-image:linear-gradient(135deg,transparent,rgba(60,90,160,.09)),var(--wall);background-position:center;background-size:cover}.home{max-width:900px;margin:auto;padding:clamp(35px,8vw,100px) 20px;text-align:center}.brand{font-size:clamp(36px,7vw,64px);font-weight:800;letter-spacing:-2px}.muted{color:var(--muted)}.clock{font-size:24px;font-variant-numeric:tabular-nums;margin:12px}.search{display:flex;gap:9px;max-width:650px;margin:26px auto}.links,.bookmarks{display:flex;justify-content:center;gap:9px;flex-wrap:wrap}.section{margin:34px 0}.section h3{font-size:14px;color:var(--muted);font-weight:600}.chip{display:inline-flex;gap:3px;align-items:center}.chip button:last-child{padding:8px}.viewer{height:calc(100vh - 116px);display:flex;flex-direction:column}.notice{padding:9px 14px;background:var(--panel);display:flex;align-items:center;gap:12px;font-size:13px}.notice span{flex:1}.notice a{color:var(--accent)}iframe{flex:1;width:100%;border:0;background:#fff}.settings{position:fixed;right:16px;top:115px;z-index:3;width:min(360px,calc(100vw - 32px));max-height:calc(100vh - 135px);overflow:auto;background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:20px;box-shadow:0 20px 70px #0006}.settings h2{margin:0 0 16px}.settings label{display:block;font-size:13px;color:var(--muted);margin:14px 0 5px}.settings input,.settings select{width:100%;padding:10px;background:var(--bg);color:var(--text);border:1px solid var(--line);border-radius:9px}.settings input[type=color]{height:44px}.settings input[type=checkbox]{width:auto}.hidden{display:none}.hint{font-size:13px;color:var(--muted)}body.no-motion *,body.no-motion *::before,body.no-motion *::after{animation:none!important;transition:none!important}@media(max-width:650px){.bar{flex-wrap:wrap}.bar input{order:-1;flex-basis:100%}.viewer{height:calc(100vh - 170px)}.shell{min-height:calc(100vh - 170px)}.settings{top:165px}}
-</style></head><body><header><div class="tabs" id="tabs" aria-label="Virtual tabs"></div><form class="bar" id="nav"><button type="button" id="back" title="Back">←</button><button type="button" id="forward" title="Forward">→</button><button type="button" id="reload" title="Reload">↻</button><button type="button" id="home" title="Home">⌂</button><input id="address" aria-label="Search or URL" placeholder="Search or enter URL" autocomplete="off"><button class="primary" type="submit">Go</button><button type="button" id="save" title="Bookmark">☆</button><button type="button" id="new" title="New virtual tab">＋</button><button type="button" id="prefs" title="Customize">⚙</button></form></header><main class="shell" id="content"></main><aside class="settings hidden" id="settings" aria-label="Feather settings"><h2>Customize Feather</h2><label for="theme">Theme</label><select id="theme"><option value="dark">Midnight</option><option value="oled">OLED black</option><option value="light">Light</option></select><label for="accent">Accent color</label><input id="accent" type="color"><label for="engine">Search engine</label><select id="engine"><option value="google">Google</option><option value="duck">DuckDuckGo</option><option value="bing">Bing</option></select><label for="wall">Wallpaper image URL (HTTPS)</label><input id="wall" placeholder="https://example.com/image.jpg"><button id="clearwall" type="button">Clear wallpaper</button><label><input id="motion" type="checkbox"> Reduce motion</label><p class="hint">Preferences and bookmarks stay in this browser's local storage. External search engines and visited sites have their own privacy policies.</p><button id="closeprefs" type="button">Close settings</button></aside><script>
-'use strict';const $=id=>document.getElementById(id);const defaults={theme:'dark',accent:'#83aaff',engine:'google',wall:'',motion:false};function load(k,fallback){try{return JSON.parse(localStorage.getItem(k))??fallback}catch{return fallback}}let prefs={...defaults,...load('feather-v2-settings',{})};let bookmarks=load('feather-v03-bookmarks',[]);if(!Array.isArray(bookmarks))bookmarks=[];bookmarks=bookmarks.filter(x=>safeURL(x));let tabs=[{id:1,history:[null],pos:0}],current=1,nextId=2;const active=()=>tabs.find(t=>t.id===current),urlOf=t=>t.history[t.pos];function safeURL(s){try{let u=new URL(s);return ['http:','https:'].includes(u.protocol)?u.href:null}catch{return null}}function resolveInput(s){s=s.trim();if(!s)return null;if(/^https?:\/\//i.test(s))return safeURL(s);if(/^(localhost|[\w-]+(?:\.[\w-]+)+)(:\d+)?(\/.*)?$/i.test(s))return safeURL('https://'+s);return ({google:'https://www.google.com/search?q=',duck:'https://duckduckgo.com/?q=',bing:'https://www.bing.com/search?q='}[prefs.engine]||'https://www.google.com/search?q=')+encodeURIComponent(s)}function persist(){try{localStorage.setItem('feather-v2-settings',JSON.stringify(prefs));localStorage.setItem('feather-v03-bookmarks',JSON.stringify(bookmarks))}catch{}}function apply(){document.body.classList.toggle('light',prefs.theme==='light');document.body.classList.toggle('oled',prefs.theme==='oled');document.body.classList.toggle('no-motion',prefs.motion);document.documentElement.style.setProperty('--accent',prefs.accent);document.documentElement.style.setProperty('--wall',prefs.wall?`url("${prefs.wall.replace(/["\\]/g,'')}")`:'none');$('theme').value=prefs.theme;$('accent').value=prefs.accent;$('engine').value=prefs.engine;$('wall').value=prefs.wall;$('motion').checked=prefs.motion}function button(label,fn){const b=document.createElement('button');b.type='button';b.textContent=label;b.addEventListener('click',fn);return b}function visit(url){if(!url)return;const t=active();t.history=t.history.slice(0,t.pos+1);t.history.push(url);t.pos++;render()}function newTab(){let t={id:nextId++,history:[null],pos:0};tabs.push(t);current=t.id;render()}function closeTab(id){tabs=tabs.filter(t=>t.id!==id);if(!tabs.length){newTab();return}if(current===id)current=tabs[tabs.length-1].id;render()}function homeView(){const d=document.createElement('section');d.className='home';const brand=document.createElement('div');brand.className='brand';brand.textContent='🪶 Feather';const sub=document.createElement('p');sub.className='muted';sub.textContent='Simple. Lightweight. Yours.';const clock=document.createElement('div');clock.className='clock';clock.textContent=new Intl.DateTimeFormat(undefined,{hour:'numeric',minute:'2-digit'}).format(new Date());const f=document.createElement('form');f.className='search';const input=document.createElement('input');input.placeholder='Search the web or enter a URL';input.setAttribute('aria-label','Search');const go=button('Search',()=>{});go.type='submit';go.className='primary';f.append(input,go);f.onsubmit=e=>{e.preventDefault();visit(resolveInput(input.value))};const quick=document.createElement('div');quick.className='links';[['Wikipedia','https://www.wikipedia.org/'],['MDN','https://developer.mozilla.org/'],['GitHub','https://github.com/'],['YouTube','https://www.youtube.com/']].forEach(([n,u])=>quick.append(button(n,()=>visit(u))));const sec=document.createElement('section');sec.className='section';const h=document.createElement('h3');h.textContent='YOUR BOOKMARKS';const saved=document.createElement('div');saved.className='bookmarks';if(!bookmarks.length){const p=document.createElement('p');p.className='muted';p.textContent='Bookmark a page using ☆ to see it here.';saved.append(p)}else bookmarks.forEach(url=>{const chip=document.createElement('span');chip.className='chip';chip.append(button(new URL(url).hostname,()=>visit(url)),button('×',()=>{bookmarks=bookmarks.filter(x=>x!==url);persist();render()}));saved.append(chip)});sec.append(h,saved);const hint=document.createElement('p');hint.className='hint';hint.textContent='Some websites block embedded viewing. Use Open in Chrome when needed.';d.append(brand,sub,clock,f,quick,sec,hint);return d}function viewer(url){const d=document.createElement('div');d.className='viewer';const notice=document.createElement('div');notice.className='notice';const span=document.createElement('span');span.textContent='Embedded view · Some websites may block loading here.';const a=document.createElement('a');a.href=url;a.target='_blank';a.rel='noopener noreferrer';a.textContent='Open in Chrome ↗';notice.append(span,a);const frame=document.createElement('iframe');frame.title='Embedded website';frame.src=url;frame.referrerPolicy='strict-origin-when-cross-origin';d.append(notice,frame);return d}function render(){const t=active(),url=urlOf(t);$('tabs').replaceChildren();tabs.forEach(item=>{const el=document.createElement('div');el.className='tab'+(item.id===current?' active':'');const sel=button(urlOf(item)?new URL(urlOf(item)).hostname:'New Tab',()=>{current=item.id;render()});sel.className='name';const x=button('×',()=>closeTab(item.id));x.title='Close tab';el.append(sel,x);$('tabs').append(el)});$('address').value=url||'';$('back').disabled=t.pos===0;$('forward').disabled=t.pos>=t.history.length-1;$('save').disabled=!url;$('save').textContent=url&&bookmarks.includes(url)?'★':'☆';$('content').replaceChildren(url?viewer(url):homeView())} $('nav').onsubmit=e=>{e.preventDefault();visit(resolveInput($('address').value))};$('back').onclick=()=>{let t=active();if(t.pos>0){t.pos--;render()}};$('forward').onclick=()=>{let t=active();if(t.pos<t.history.length-1){t.pos++;render()}};$('reload').onclick=render;$('home').onclick=()=>{let t=active();t.history=t.history.slice(0,t.pos+1);t.history.push(null);t.pos++;render()};$('new').onclick=newTab;$('save').onclick=()=>{let url=urlOf(active());if(!url)return;bookmarks=bookmarks.includes(url)?bookmarks.filter(x=>x!==url):[...bookmarks,url];persist();render()};$('prefs').onclick=()=>$('settings').classList.toggle('hidden');$('closeprefs').onclick=()=>$('settings').classList.add('hidden');['theme','accent','engine','motion','wall'].forEach(id=>$(id).addEventListener('change',()=>{let value=id==='motion'?$(id).checked:$(id).value;if(id==='wall'&&value&&!/^https:\/\//i.test(value)){alert('Please use an HTTPS image URL.');return}prefs[id]=value;persist();apply()}));$('clearwall').onclick=()=>{prefs.wall='';persist();apply()};document.addEventListener('keydown',e=>{if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='k'){e.preventDefault();$('address').focus();$('address').select()}if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='b'){e.preventDefault();$('save').click()}});apply();render();
-</script></body></html>
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#10131d">
+<title>Feather Browser v3.0</title>
+<style>
+:root {
+  --bg:#10131d;
+  --panel:#191e2b;
+  --panel2:#232a3b;
+  --text:#eef2ff;
+  --muted:#99a5bd;
+  --accent:#729cff;
+  --border:#354056;
+}
+* {box-sizing:border-box}
+body {
+  margin:0;
+  font:14px system-ui,Segoe UI,sans-serif;
+  background:var(--bg);
+  color:var(--text);
+}
+button,input,select {font:inherit}
+button {
+  border:1px solid var(--border);
+  background:var(--panel2);
+  color:var(--text);
+  border-radius:9px;
+  padding:9px 12px;
+  cursor:pointer;
+}
+button:hover {filter:brightness(1.15)}
+button:focus-visible,input:focus-visible,select:focus-visible {
+  outline:2px solid var(--accent);
+}
+input,select {
+  background:var(--panel2);
+  color:var(--text);
+  border:1px solid var(--border);
+  border-radius:9px;
+  padding:10px;
+  min-width:0;
+}
+header {
+  background:var(--panel);
+  padding:10px;
+  border-bottom:1px solid var(--border);
+}
+.tabs {
+  display:flex;
+  gap:6px;
+  overflow-x:auto;
+  padding-bottom:9px;
+}
+.tab {white-space:nowrap}
+.tab.active {
+  background:var(--accent);
+  color:#09101f;
+}
+.toolbar {
+  display:flex;
+  align-items:center;
+  gap:7px;
+}
+#address {flex:1}
+main {min-height:calc(100vh - 110px)}
+#home {
+  min-height:calc(100vh - 115px);
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  padding:24px;
+  background-position:center;
+  background-size:cover;
+}
+.home-inner {
+  width:100%;
+  max-width:680px;
+  text-align:center;
+  padding:30px;
+  border-radius:24px;
+  background:color-mix(in srgb,var(--bg) 85%,transparent);
+  backdrop-filter:blur(15px);
+}
+.logo {
+  font-size:clamp(36px,7vw,64px);
+  font-weight:750;
+  letter-spacing:-2px;
+}
+.logo span {color:var(--accent)}
+.subtitle {color:var(--muted)}
+.search {
+  display:flex;
+  gap:8px;
+  margin:25px 0;
+}
+.search input {flex:1}
+.shortcuts {
+  display:flex;
+  justify-content:center;
+  flex-wrap:wrap;
+  gap:10px;
+}
+.shortcut {padding:14px 18px}
+#clock {
+  font-size:28px;
+  font-weight:600;
+  margin:20px;
+}
+#viewer {display:none;height:calc(100vh - 115px)}
+#frame {
+  width:100%;
+  height:100%;
+  border:0;
+  background:white;
+}
+#status {
+  color:var(--muted);
+  padding:9px;
+  font-size:12px;
+  text-align:center;
+}
+dialog {
+  background:var(--panel);
+  color:var(--text);
+  border:1px solid var(--border);
+  border-radius:16px;
+  width:min(92vw,520px);
+  max-height:85vh;
+  overflow:auto;
+}
+dialog::backdrop {background:#000a}
+.setting {margin:15px 0}
+.setting label {
+  display:block;
+  margin-bottom:7px;
+  color:var(--muted);
+}
+.setting input,.setting select {width:100%}
+.actions {
+  display:flex;
+  gap:8px;
+  flex-wrap:wrap;
+}
+.bookmark-row {
+  display:flex;
+  gap:8px;
+  align-items:center;
+  margin:8px 0;
+}
+.bookmark-row button:first-child {
+  flex:1;
+  overflow:hidden;
+  text-overflow:ellipsis;
+}
+@media(max-width:600px) {
+  .toolbar {flex-wrap:wrap}
+  #address {flex-basis:100%;order:-1}
+  .home-inner {padding:18px}
+}
+@media(prefers-reduced-motion:reduce) {
+  *,*::before,*::after {
+    animation:none!important;
+    transition:none!important;
+  }
+}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="tabs" id="tabs"></div>
+  <div class="toolbar">
+    <button id="back" title="Back">←</button>
+    <button id="forward" title="Forward">→</button>
+    <button id="reload" title="Reload">↻</button>
+    <button id="homeBtn" title="Home">⌂</button>
+    <input id="address" aria-label="Address or search" placeholder="Search or enter URL">
+    <button id="go">Go</button>
+    <button id="bookmarkBtn" title="Bookmark">☆</button>
+    <button id="bookmarksBtn">Bookmarks</button>
+    <button id="settingsBtn">⚙</button>
+  </div>
+</header>
+
+<main>
+  <section id="home">
+    <div class="home-inner">
+      <div class="logo">Feather<span>.</span></div>
+      <p class="subtitle">Your web. Your experience.</p>
+      <div id="clock"></div>
+      <div class="search">
+        <input id="homeSearch" placeholder="Search the web...">
+        <button id="homeGo">Search</button>
+      </div>
+      <div class="shortcuts" id="shortcuts"></div>
+      <p class="subtitle">Fast • Customizable • Private by design</p>
+    </div>
+  </section>
+  <section id="viewer">
+    <iframe id="frame" sandbox=""
+      referrerpolicy="no-referrer"
+      title="Feather website preview"></iframe>
+  </section>
+</main>
+<div id="status">Feather Browser v3.0</div>
+
+<dialog id="settings">
+  <h2>⚙ Feather Settings</h2>
+  <div class="setting">
+    <label for="backend">Proxy backend URL</label>
+    <input id="backend" placeholder="https://your-service.onrender.com">
+  </div>
+  <div class="setting">
+    <label for="engine">Search engine</label>
+    <select id="engine">
+      <option value="google">Google</option>
+      <option value="duck">DuckDuckGo</option>
+      <option value="bing">Bing</option>
+    </select>
+  </div>
+  <div class="setting">
+    <label for="theme">Theme</label>
+    <select id="theme">
+      <option value="dark">Midnight</option>
+      <option value="oled">OLED Black</option>
+      <option value="light">Light</option>
+    </select>
+  </div>
+  <div class="setting">
+    <label for="accent">Accent color</label>
+    <input type="color" id="accent" value="#729cff">
+  </div>
+  <div class="setting">
+    <label for="wallpaper">Wallpaper image URL (HTTPS)</label>
+    <input id="wallpaper" placeholder="https://example.com/wallpaper.jpg">
+  </div>
+  <div class="setting">
+    <label>
+      <input type="checkbox" id="proxyEnabled" style="width:auto">
+      Use read-only proxy preview
+    </label>
+  </div>
+  <div class="actions">
+    <button id="saveSettings">Save settings</button>
+    <button id="closeSettings">Close</button>
+  </div>
+  <p class="subtitle">
+    Proxy previews support approved public HTML pages.
+    Logins, forms and interactive scripts are not supported.
+  </p>
+</dialog>
+
+<dialog id="bookmarkDialog">
+  <h2>☆ Bookmarks</h2>
+  <div id="bookmarkList"></div>
+  <button id="closeBookmarks">Close</button>
+</dialog>
+
+<script>
+"use strict";
+
+const $ = id => document.getElementById(id);
+const KEY = "feather_v3_preferences";
+
+const defaults = {
+  backend:"",
+  engine:"google",
+  theme:"dark",
+  accent:"#729cff",
+  wallpaper:"",
+  proxyEnabled:false,
+  bookmarks:[],
+  shortcuts:[
+    {name:"Google",url:"https://www.google.com"},
+    {name:"YouTube",url:"https://www.youtube.com"},
+    {name:"Wikipedia",url:"https://en.wikipedia.org"},
+    {name:"GitHub",url:"https://github.com"}
+  ]
+};
+
+let saved = {};
+try {saved = JSON.parse(localStorage.getItem(KEY)) || {}}
+catch {saved = {}}
+let prefs = {...defaults,...saved};
+if (!Array.isArray(prefs.bookmarks)) prefs.bookmarks = [];
+if (!Array.isArray(prefs.shortcuts)) prefs.shortcuts = defaults.shortcuts;
+
+function save() {
+  localStorage.setItem(KEY,JSON.stringify(prefs));
+}
+
+let tabs = [{history:[""],index:0}];
+let active = 0;
+let requestID = 0;
+
+function current() {return tabs[active]}
+function currentURL() {
+  return current().history[current().index];
+}
+
+function setStatus(message) {$("status").textContent=message}
+
+function searchURL(query) {
+  const engines = {
+    google:"https://www.google.com/search?q=",
+    duck:"https://duckduckgo.com/?q=",
+    bing:"https://www.bing.com/search?q="
+  };
+  return (engines[prefs.engine] || engines.google)
+    + encodeURIComponent(query);
+}
+
+function normalize(input) {
+  input = input.trim();
+  if (!input) return "";
+  if (/^https?:\/\//i.test(input)) {
+    try {
+      const u = new URL(input);
+      return u.protocol === "https:" ? u.href : searchURL(input);
+    } catch {return searchURL(input)}
+  }
+  if (/^[a-z0-9-]+(\.[a-z0-9-]+)+([/:?#].*)?$/i.test(input)) {
+    try {return new URL("https://"+input).href}
+    catch {}
+  }
+  return searchURL(input);
+}
+
+function navigate(input) {
+  const url = normalize(input);
+  if (!url) return;
+  const tab = current();
+  tab.history = tab.history.slice(0,tab.index+1);
+  tab.history.push(url);
+  tab.index++;
+  render();
+}
+
+function renderTabs() {
+  const area = $("tabs");
+  area.replaceChildren();
+  tabs.forEach((tab,i)=>{
+    const button=document.createElement("button");
+    button.className="tab"+(i===active?" active":"");
+    let title="New Tab";
+    const url=tab.history[tab.index];
+    if(url) {
+      try {title=new URL(url).hostname}
+      catch {title="Page"}
+    }
+    button.textContent=title+"  ×";
+    button.onclick=()=>{
+      if(i===active && tabs.length>1) {
+        tabs.splice(i,1);
+        active=Math.min(i,tabs.length-1);
+      } else {
+        active=i;
+      }
+      render();
+    };
+    area.append(button);
+  });
+  const add=document.createElement("button");
+  add.textContent="+";
+  add.title="New tab";
+  add.onclick=()=>{
+    tabs.push({history:[""],index:0});
+    active=tabs.length-1;
+    render();
+  };
+  area.append(add);
+}
+
+function showHome() {
+  $("home").style.display="flex";
+  $("viewer").style.display="none";
+  $("frame").removeAttribute("srcdoc");
+  $("address").value="";
+  setStatus("Feather Browser v3.0 — Ready");
+}
+
+async function showPage(url) {
+  $("home").style.display="none";
+  $("viewer").style.display="block";
+  $("address").value=url;
+  const frame=$("frame");
+  frame.srcdoc="<p style='font-family:sans-serif;padding:25px'>Loading preview...</p>";
+  const id=++requestID;
+
+  if(!prefs.proxyEnabled || !prefs.backend) {
+    frame.srcdoc="<p style='font-family:sans-serif;padding:25px'>Proxy preview is disabled. Enable it in Feather Settings.</p>";
+    setStatus("Proxy preview disabled");
+    return;
+  }
+
+  try {
+    const base=new URL(prefs.backend);
+    if(base.protocol!=="https:") throw Error("Backend must use HTTPS");
+    const endpoint=new URL("/proxy",base);
+    endpoint.searchParams.set("url",url);
+    setStatus("Loading "+url);
+
+    const controller=new AbortController();
+    const timeout=setTimeout(()=>controller.abort(),12000);
+    let response;
+    try {
+      response=await fetch(endpoint,{
+        signal:controller.signal,
+        credentials:"omit"
+      });
+    } finally {clearTimeout(timeout)}
+
+    const html=await response.text();
+    if(id!==requestID) return;
+
+    if(!response.ok) {
+      let message="Preview unavailable";
+      try {message=JSON.parse(html).error||message}
+      catch {}
+      throw Error(message);
+    }
+
+    // Sandboxed document: no scripts, forms or same-origin privileges.
+    frame.srcdoc=html;
+    setStatus("Read-only preview: "+url);
+  } catch(error) {
+    if(id!==requestID) return;
+    frame.srcdoc="";
+    const message=document.createElement("p");
+    message.style.cssText="font-family:sans-serif;padding:25px";
+    message.textContent="Cannot preview this page: "+error.message;
+    const doc="<!doctype html><html><body>"+message.outerHTML+"</body></html>";
+    frame.srcdoc=doc.replace(/&/g,"&amp;").replace(/&amp;lt;/g,"&lt;");
+    setStatus("Preview failed");
+  }
+}
+
+function render() {
+  ++requestID;
+  renderTabs();
+  const url=currentURL();
+  if(!url) showHome();
+  else showPage(url);
+}
+
+$("go").onclick=()=>navigate($("address").value);
+$("address").onkeydown=e=>{
+  if(e.key==="Enter") navigate(e.target.value);
+};
+$("homeGo").onclick=()=>navigate($("homeSearch").value);
+$("homeSearch").onkeydown=e=>{
+  if(e.key==="Enter") navigate(e.target.value);
+};
+$("homeBtn").onclick=()=>{
+  const tab=current();
+  tab.history=tab.history.slice(0,tab.index+1);
+  tab.history.push("");
+  tab.index++;
+  render();
+};
+$("back").onclick=()=>{
+  if(current().index>0) {current().index--;render()}
+};
+$("forward").onclick=()=>{
+  if(current().index<current().history.length-1) {
+    current().index++;
+    render();
+  }
+};
+$("reload").onclick=render;
+
+function renderShortcuts() {
+  const area=$("shortcuts");
+  area.replaceChildren();
+  prefs.shortcuts.forEach(item=>{
+    const button=document.createElement("button");
+    button.className="shortcut";
+    button.textContent=item.name;
+    button.onclick=()=>navigate(item.url);
+    area.append(button);
+  });
+}
+
+$("bookmarkBtn").onclick=()=>{
+  const url=currentURL();
+  if(!url) return;
+  if(!prefs.bookmarks.some(b=>b.url===url)) {
+    prefs.bookmarks.push({url,name:new URL(url).hostname});
+    save();
+    setStatus("Bookmark saved");
+  } else setStatus("Already bookmarked");
+};
+
+function renderBookmarks() {
+  const area=$("bookmarkList");
+  area.replaceChildren();
+  if(!prefs.bookmarks.length) area.textContent="No bookmarks yet.";
+  prefs.bookmarks.forEach((b,i)=>{
+    const row=document.createElement("div");
+    row.className="bookmark-row";
+    const open=document.createElement("button");
+    open.textContent=b.name;
+    open.onclick=()=>{
+      $("bookmarkDialog").close();
+      navigate(b.url);
+    };
+    const remove=document.createElement("button");
+    remove.textContent="Remove";
+    remove.onclick=()=>{
+      prefs.bookmarks.splice(i,1);
+      save();
+      renderBookmarks();
+    };
+    row.append(open,remove);
+    area.append(row);
+  });
+}
+
+$("bookmarksBtn").onclick=()=>{
+  renderBookmarks();
+  $("bookmarkDialog").showModal();
+};
+$("closeBookmarks").onclick=()=>$("bookmarkDialog").close();
+
+function applyTheme() {
+  const themes={
+    dark:["#10131d","#191e2b","#232a3b","#eef2ff","#99a5bd","#354056"],
+    oled:["#000000","#0b0b0b","#171717","#ffffff","#aaaaaa","#333333"],
+    light:["#f3f6fc","#ffffff","#e5ebf5","#152033","#56647a","#ccd5e4"]
+  };
+  const values=themes[prefs.theme]||themes.dark;
+  const keys=["--bg","--panel","--panel2","--text","--muted","--border"];
+  keys.forEach((key,i)=>document.documentElement.style.setProperty(key,values[i]));
+  document.documentElement.style.setProperty("--accent",prefs.accent);
+
+  let wallpaper="";
+  try {
+    const u=new URL(prefs.wallpaper);
+    if(u.protocol==="https:") wallpaper='url("'+u.href.replace(/["\\]/g,"")+'")';
+  } catch {}
+  $("home").style.backgroundImage=wallpaper;
+}
+
+$("settingsBtn").onclick=()=>{
+  $("backend").value=prefs.backend;
+  $("engine").value=prefs.engine;
+  $("theme").value=prefs.theme;
+  $("accent").value=prefs.accent;
+  $("wallpaper").value=prefs.wallpaper;
+  $("proxyEnabled").checked=prefs.proxyEnabled;
+  $("settings").showModal();
+};
+$("closeSettings").onclick=()=>$("settings").close();
+$("saveSettings").onclick=()=>{
+  prefs.backend=$("backend").value.trim().replace(/\/+$/,"");
+  prefs.engine=$("engine").value;
+  prefs.theme=$("theme").value;
+  prefs.accent=$("accent").value;
+  prefs.wallpaper=$("wallpaper").value.trim();
+  prefs.proxyEnabled=$("proxyEnabled").checked;
+  save();
+  applyTheme();
+  $("settings").close();
+  render();
+};
+
+function updateClock() {
+  $("clock").textContent=new Date().toLocaleTimeString([],{
+    hour:"numeric",minute:"2-digit"
+  });
+}
+updateClock();
+setInterval(()=>{
+  if(document.visibilityState==="visible") updateClock();
+},30000);
+
+document.addEventListener("keydown",e=>{
+  if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="l") {
+    e.preventDefault();
+    $("address").focus();
+    $("address").select();
+  }
+  if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="k") {
+    e.preventDefault();
+    $("homeSearch").focus();
+  }
+});
+
+renderShortcuts();
+applyTheme();
+render();
+</script>
+</body>
+</html>
+
