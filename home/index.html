@@ -1,0 +1,17 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="referrer" content="no-referrer"><title>Feather Home</title><style>:root{color-scheme:dark;font:16px system-ui;background:#101018;color:#eee8ff}body{margin:0;min-height:100dvh;display:grid;place-items:center;background:radial-gradient(ellipse at 50% 30%,#593a7b40,transparent 65%)}main{max-width:440px;padding:35px;text-align:center}b{font-size:64px;color:#bca7ff}h1{font-weight:500;letter-spacing:-1px}p{color:#a69bb9;line-height:1.7}button,a{display:inline-block;padding:13px 20px;border:0;border-radius:12px;background:#bca7ff;font:inherit;color:#17121f;cursor:pointer;text-decoration:none}button:disabled{opacity:.5}small{display:block;margin-top:35px;color:#82768f}.muted{font-size:12px}#details{overflow-wrap:anywhere}</style></head><body><main><b>F&#10022;</b><h1>Your permanent starting point.</h1><p id="status" role="status">Finding your current Feather connection.</p><button id="retry">Check again</button><a id="open" hidden rel="noreferrer">Open current connection</a><p class="muted" id="details">Keep this page bookmarked. Your PC supplies the current link.</p><small>FEATHER HOME � ONE BOOKMARK</small></main><script>
+const statusText=document.querySelector('#status'),retry=document.querySelector('#retry'),open=document.querySelector('#open');
+async function check(){retry.disabled=true;open.hidden=true;try{
+  const response=await fetch('https://raw.githubusercontent.com/Whlsk3ndd/Feather-browser-2/main/home/connection.json?t='+Date.now(),{cache:'no-store',signal:AbortSignal.timeout(10000)});
+  if(!response.ok)throw new Error('Connection information could not be read (HTTP '+response.status+').');
+  const data=await response.json();
+  if(!data.url){statusText.textContent='Your bookmark is ready. Connect the PC launcher to activate it.';return;}
+  const url=new URL(data.url);
+  if(url.protocol!=='https:'||!/^[-a-z0-9]+\.trycloudflare\.com$/.test(url.hostname)||url.username||url.password||url.pathname!=='/'||url.search||url.hash)throw new Error('The saved connection address is invalid.');
+  statusText.textContent='Checking whether your PC is online.';
+  open.href=url.origin;open.hidden=false;
+  const health=await fetch(url.origin+'/public/health',{cache:'no-store',credentials:'omit',signal:AbortSignal.timeout(10000)});
+  if(!health.ok||(await health.json()).online!==true)throw new Error('Your PC connection is not ready.');
+  statusText.textContent='Connected. Opening Feather.';location.replace(url.origin);
+}catch(error){statusText.textContent='Feather is offline, or its connection could not be checked.';document.querySelector('#details').textContent=error.message+' Start the public launcher on your PC, then check again.';}finally{retry.disabled=false;}}
+retry.onclick=check;check();
+</script></body></html>
